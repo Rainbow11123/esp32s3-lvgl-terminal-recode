@@ -1,0 +1,69 @@
+name: Build esp32s3-lvgl-terminal firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'release name'
+        required: true
+        default: 'v1.0.0'
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+        contents: write
+  
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+        
+      - name: Install PlatformIO
+        run: |
+          pip install --upgrade platformio
+          pio --version
+        
+      - name: Build firmware
+        run: |
+          pio run --environment esp32-s3-devkitc-1
+        
+      - name: Prepare firmware files
+        run: |
+          mkdir -p release
+          cp .pio/build/esp32-s3-devkitc-1/firmware.bin release/firmware.bin
+          cp .pio/build/esp32-s3-devkitc-1/bootloader.bin release/bootloader.bin
+          cp .pio/build/esp32-s3-devkitc-1/partitions.bin release/partitions.bin
+            
+          echo "Build Date: $(date)" > release/build-info.txt
+          echo "Git Commit: ${{ github.sha }}" >> release/build-info.txt
+          echo "Git Branch: ${{ github.ref_name }}" >> release/build-info.txt
+      
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-lvgl-terminal-firmware
+          path: release/
+          
+      - name: Create Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: ${{ github.event.inputs.tag_name }}
+          files: |
+            release/firmware.bin
+            release/bootloader.bin
+            release/partitions.bin
+            release/build-info.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
